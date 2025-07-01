@@ -1,0 +1,40 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment folder
+.venv/
+venv/
+env/
+ENV/
+
+
+
+# VSCode settings
+.vscode/
+
+# macOS system files
+.DS_Store
+
+# Python packaging
+*.egg-info/
+dist/
+build/
+
+# Streamlit cache (optional)
+.streamlit/cache/
+
+# Logs and SQLite databases
+*.log
+*.sqlite3
+
+# Environment variables (never commit secrets!)
+.env
+.env.*
+
+# PyCharm project files
+.idea/
+
+# Other
+*.pyc
