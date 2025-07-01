@@ -1,71 +1,117 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import s3fs
 import os
 
-# ----------------- Environment Detection ------------------
-
 def is_running_locally():
-    """Detect if the app is running in a local development environment."""
     return os.environ.get("STREAMLIT_ENV") == "local"
 
-# ----------------- AWS S3FS Setup ------------------
-
 def get_s3fs():
-    """Configure S3 filesystem access depending on environment."""
     if is_running_locally():
-        return s3fs.S3FileSystem(anon=False)  # uses local ~/.aws/credentials or env vars
+        return s3fs.S3FileSystem(anon=False)
     else:
-        aws_access_key = st.secrets["aws"]["aws_access_key_id"]
-        aws_secret_key = st.secrets["aws"]["aws_secret_access_key"]
-        aws_region = st.secrets["aws"].get("region", "us-east-1")
-
         return s3fs.S3FileSystem(
-            key=aws_access_key,
-            secret=aws_secret_key,
-            client_kwargs={"region_name": aws_region}
+            key=st.secrets["aws"]["aws_access_key_id"],
+            secret=st.secrets["aws"]["aws_secret_access_key"],
+            client_kwargs={"region_name": st.secrets["aws"].get("region", "us-east-1")},
         )
 
 fs = get_s3fs()
 
-# ----------------- S3 Paths ------------------
-
-S3_PATHS = {
-    "Live Score Data": "aws-glue-assets-cricket/output_cricket/live/score_data",
-    "Live Basic Match Data": "aws-glue-assets-cricket/output_cricket/nonlive/cricket_data",
-    "Completed Match Data": "aws-glue-assets-cricket/output_cricket/live/cricket_data"
-}
-
-# ----------------- Load Partitioned Parquet ------------------
+LIVE_SCORE_PATH = "aws-glue-assets-cricket/output_cricket/live/score_data"
 
 @st.cache_data(ttl=60)
-def load_partitioned_parquet(s3_prefix: str, max_files: int = 20) -> pd.DataFrame:
-    """Recursively load recent Parquet files from S3."""
+def load_latest_live_score(s3_prefix: str, max_files=10) -> pd.DataFrame:
     files = fs.glob(f"{s3_prefix}/**/*.parquet")
     if not files:
         return pd.DataFrame()
-    
     files = sorted(files, reverse=True)[:max_files]
     dfs = [pd.read_parquet(f"s3://{file}", filesystem=fs) for file in files]
     return pd.concat(dfs, ignore_index=True)
 
-# ----------------- Streamlit UI ------------------
+def safe_val(val):
+    if val is None or (isinstance(val, str) and val.strip() == ""):
+        return "Missing"
+    return val
 
 st.title("🏏 Real-Time Cricket Dashboard")
 
-for section_title, s3_prefix in S3_PATHS.items():
-    st.subheader(f"📊 {section_title}")
-    df = load_partitioned_parquet(s3_prefix)
-    
-    if df.empty:
-        st.warning("No data found.")
-    else:
-        st.dataframe(df.head(50))
+df = load_latest_live_score(LIVE_SCORE_PATH)
 
-        with st.expander("📌 Summary"):
-            if "match_id" in df.columns:
-                st.write("Match Count:", df['match_id'].nunique())
-            if "runs" in df.columns:
-                st.metric("Total Runs", int(df['runs'].sum()))
-            if "team" in df.columns:
-                st.write("Teams:", df['team'].dropna().unique().tolist())
+if df.empty:
+    st.warning("No live score data found.")
+    st.stop()
+
+required_cols = ['match_id', 'name', 'status', 'inning', 'runs', 'wickets', 'overs', 'teams', 'event_time_ts']
+missing = [c for c in required_cols if c not in df.columns]
+if missing:
+    st.error(f"Missing expected columns: {missing}")
+    st.stop()
+
+# Extract all unique teams (handle list/array values)
+all_teams = set()
+df['teams'].apply(lambda x: all_teams.update(x) if isinstance(x, (list, tuple, np.ndarray)) else all_teams.add(x))
+teams = sorted(all_teams)
+
+# Sidebar with small font checkboxes, default unchecked
+st.sidebar.markdown("<style>div.row-widget.stCheckbox > div{flex-direction:row; font-size:12px;}</style>", unsafe_allow_html=True)
+
+selected_teams = []
+for team in teams:
+    if st.sidebar.checkbox(team, value=False):
+        selected_teams.append(team)
+
+if not selected_teams:
+    st.info("Please select one or more teams from the sidebar to see the data.")
+    st.stop()
+
+# Filter rows where any team in the row's teams list is selected
+mask = df['teams'].apply(lambda x: any(team in selected_teams for team in x) if isinstance(x, (list, tuple, np.ndarray)) else x in selected_teams)
+filtered_df = df[mask]
+
+if filtered_df.empty:
+    st.warning("No data for selected teams.")
+    st.stop()
+
+# Keep only rows with max event_time_ts per match_id
+max_times = filtered_df.groupby('match_id')['event_time_ts'].transform('max')
+filtered_df = filtered_df[filtered_df['event_time_ts'] == max_times]
+
+# Group by match_id and name only
+grouped = filtered_df.groupby(['match_id', 'name'], as_index=False)
+
+colors = ["#f0f8ff", "#e6f2ff"]
+
+for i, ((match_id, match_name), group_df) in enumerate(grouped):
+    bg_color = colors[i % len(colors)]
+
+    # Since status is unique per match_id due to filtering, take first status in group
+    status = safe_val(group_df['status'].iloc[0])
+
+    # Get max event_time_ts for this group and format it nicely
+    max_event_time = group_df['event_time_ts'].max()
+    if pd.isna(max_event_time):
+        max_event_time_str = "Missing"
+    else:
+        max_event_time_str = pd.to_datetime(max_event_time).strftime("%Y-%m-%d %H:%M")
+
+    st.markdown(f"""
+    <div style="background-color:{bg_color}; padding:10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-weight:bold; font-size:16px;">{safe_val(match_name)}</span>
+        <span style="font-size:10px; color:#666;">{max_event_time_str}</span>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    with st.expander(f"Status: {status}", expanded=False):
+        innings_data = []
+        for _, row in group_df.iterrows():
+            inning = safe_val(row['inning'])
+            runs = row['runs'] if row['runs'] is not None else "Missing"
+            wickets = row['wickets'] if row['wickets'] is not None else "Missing"
+            overs = row['overs'] if row['overs'] is not None else "Missing"
+            score = f"{runs}/{wickets} ({overs} ov)"
+            innings_data.append((inning, score))
+        
+        innings_df = pd.DataFrame(innings_data, columns=["Inning", "Score"])
+        st.table(innings_df)
