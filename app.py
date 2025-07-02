@@ -99,6 +99,12 @@ st.write("Columns:", df.columns.tolist())
 # Check types for key columns
 st.write("event_time_ts types:", df['event_time_ts'].apply(type).unique())
 st.write("Teams example:", df['teams'].head(3))
+st.write("Unique types in event_time_ts column:", df['event_time_ts'].apply(lambda x: type(x).__name__).unique())
+st.write("Sample event_time_ts values:", df['event_time_ts'].head(5).tolist())
+st.write("Example teams values and types:")
+st.write(df['teams'].head(5).tolist())
+st.write(df['teams'].apply(lambda x: type(x)).unique())
+
 
 # If teams is list/array, show first element per row to check data
 if 'teams' in df.columns:
@@ -121,19 +127,19 @@ df['teams'].apply(lambda x: all_teams.update(x) if isinstance(x, (list, tuple, n
 teams = sorted(all_teams)
 
 # Sidebar checkboxes
-selected_teams = []
-for team in teams:
-    if st.sidebar.checkbox(team, value=False):
-        selected_teams.append(team)
+# selected_teams = []
+# for team in teams:
+#     if st.sidebar.checkbox(team, value=False):
+#         selected_teams.append(team)
 
-if not selected_teams:
-    st.info("Please select one or more teams from the sidebar to see the data.")
-    st.stop()
+# if not selected_teams:
+#     st.info("Please select one or more teams from the sidebar to see the data.")
+#     st.stop()
 
-# Filter rows where any team in the row's teams list is selected
-mask = df['teams'].apply(lambda x: any(team in selected_teams for team in x) if isinstance(x, (list, tuple, np.ndarray)) else x in selected_teams)
-filtered_df = df[mask]
-
+# # Filter rows where any team in the row's teams list is selected
+# mask = df['teams'].apply(lambda x: any(team in selected_teams for team in x) if isinstance(x, (list, tuple, np.ndarray)) else x in selected_teams)
+# filtered_df = df[mask]
+filtered_df = df
 if filtered_df.empty:
     st.warning("No data for selected teams.")
     st.stop()
