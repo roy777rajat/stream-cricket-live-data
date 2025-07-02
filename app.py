@@ -72,23 +72,7 @@ def safe_val(val):
         return "Missing"
     return val
 
-# Sidebar social icons
-st.sidebar.markdown("""
-<div class="sidebar-icons">
-  <a href="https://facebook.com/your-profile" target="_blank" title="Facebook">
-    <img src="https://img.icons8.com/ios-filled/24/000000/facebook--v1.png"/>
-  </a>
-  <a href="https://linkedin.com/in/your-profile" target="_blank" title="LinkedIn">
-    <img src="https://img.icons8.com/ios-filled/24/000000/linkedin.png"/>
-  </a>
-  <a href="https://github.com/your-profile" target="_blank" title="GitHub">
-    <img src="https://img.icons8.com/ios-filled/24/000000/github.png"/>
-  </a>
-  <a href="https://medium.com/@your-profile" target="_blank" title="Medium">
-    <img src="https://img.icons8.com/ios-filled/24/000000/medium-logo.png"/>
-  </a>
-</div>
-""", unsafe_allow_html=True)
+
 
 st.title("🏏 Real-Time Cricket Dashboard")
 
@@ -144,7 +128,7 @@ for i, ((match_id, match_name), group_df) in enumerate(grouped):
     st.markdown(f"""
     <div style="background-color:{bg_color}; padding:8px; border-radius:8px; font-size:10px; display:flex; justify-content:space-between; align-items:center;">
         <span style="font-weight:bold; color:darkblue; font-size:12px;">{safe_val(match_name)}</span>
-        <span style="font-size:8px;">{ts}</span>
+        <span style="font-size:8px;color:darkblue;">{ts}</span>
     </div>
     """, unsafe_allow_html=True)
 
