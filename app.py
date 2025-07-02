@@ -5,26 +5,41 @@ import s3fs
 import os
 
 # CSS styles for small fonts and layout
-st.markdown("""
+st.sidebar.markdown("""
 <style>
-h1 { font-size: 18px !important; font-weight: bold; }
-div.row-widget.stCheckbox > div { flex-direction: row !important; font-size: 10px !important; }
-.sidebar-icons {
+.sidebar-header {
+    font-weight: bold;
+    font-size: 13px;
+    margin: 10px 0 8px 0;
+    color: #ffffff;
+}
+.icon-row {
     display: flex;
-    justify-content: start;
-    gap: 8px;
+    gap: 12px;
+    align-items: center;
     margin-bottom: 10px;
-}
-.sidebar-icons a {
-    text-decoration: none;
-    font-size: 20px;
-    color: #333;
-}
-.sidebar-icons a:hover {
-    color: #0073b1;
 }
 </style>
 """, unsafe_allow_html=True)
+
+st.sidebar.markdown('<div class="sidebar-header">Connect Rajat</div>', unsafe_allow_html=True)
+st.sidebar.markdown("""
+<div class="icon-row">
+  <a href="https://facebook.com/royrajat" target="_blank" title="Facebook">
+    <img src="https://img.icons8.com/ios-filled/24/1877F2/facebook--v1.png"/>
+  </a>
+  <a href="https://linkedin.com/in/royrajat" target="_blank" title="LinkedIn">
+    <img src="https://img.icons8.com/ios-filled/24/0077B5/linkedin.png"/>
+  </a>
+  <a href="https://github.com/royrajat" target="_blank" title="GitHub">
+    <img src="https://img.icons8.com/ios-filled/24/FFFFFF/github.png"/>
+  </a>
+  <a href="https://medium.com/@royrajat" target="_blank" title="Medium">
+    <img src="https://img.icons8.com/ios-filled/24/FFFFFF/medium-logo.png"/>
+  </a>
+</div>
+""", unsafe_allow_html=True)
+
 
 def is_running_locally():
     return os.environ.get("STREAMLIT_ENV") == "local"
