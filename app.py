@@ -58,14 +58,28 @@ fs = get_s3fs()
 
 LIVE_SCORE_PATH = "aws-glue-assets-cricket/output_cricket/live/score_data"
 
+# @st.cache_data(ttl=60)
+# def load_latest_live_score(s3_prefix: str, max_files=10) -> pd.DataFrame:
+#     files = fs.glob(f"{s3_prefix}/**/*.parquet")
+#     if not files:
+#         return pd.DataFrame()
+#     files = sorted(files, reverse=True)[:max_files]
+#     dfs = [pd.read_parquet(f"s3://{file}", filesystem=fs) for file in files]
+#     return pd.concat(dfs, ignore_index=True)
+
 @st.cache_data(ttl=60)
 def load_latest_live_score(s3_prefix: str, max_files=10) -> pd.DataFrame:
-    files = fs.glob(f"{s3_prefix}/**/*.parquet")
+    files = fs.glob(f"s3://{s3_prefix}/**/*.parquet")
+    st.write(f"DEBUG: Found {len(files)} files under s3://{s3_prefix}")
     if not files:
         return pd.DataFrame()
     files = sorted(files, reverse=True)[:max_files]
-    dfs = [pd.read_parquet(f"s3://{file}", filesystem=fs) for file in files]
+    dfs = []
+    for file in files:
+        st.write(f"DEBUG: Reading file {file}")
+        dfs.append(pd.read_parquet(f"s3://{file}", filesystem=fs))
     return pd.concat(dfs, ignore_index=True)
+
 
 def safe_val(val):
     if val is None or (isinstance(val, str) and val.strip() == ""):
