@@ -55,7 +55,13 @@ df['teams'].apply(lambda x: all_teams.update(x) if isinstance(x, (list, tuple, n
 teams = sorted(all_teams)
 
 # Sidebar with small font checkboxes, default unchecked
-st.sidebar.markdown("<style>div.row-widget.stCheckbox > div{flex-direction:row; font-size:12px;}</style>", unsafe_allow_html=True)
+st.sidebar.markdown("""
+<style>
+div.row-widget.stCheckbox > div {
+    flex-direction: row;
+    font-size: 10px;  /* very small font */
+}
+</style>""", unsafe_allow_html=True)
 
 selected_teams = []
 for team in teams:
@@ -89,17 +95,10 @@ for i, ((match_id, match_name), group_df) in enumerate(grouped):
     # Since status is unique per match_id due to filtering, take first status in group
     status = safe_val(group_df['status'].iloc[0])
 
-    # Get max event_time_ts for this group and format it nicely
-    max_event_time = group_df['event_time_ts'].max()
-    if pd.isna(max_event_time):
-        max_event_time_str = "Missing"
-    else:
-        max_event_time_str = pd.to_datetime(max_event_time).strftime("%Y-%m-%d %H:%M")
-
     st.markdown(f"""
-    <div style="background-color:{bg_color}; padding:10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-weight:bold; font-size:16px;">{safe_val(match_name)}</span>
-        <span style="font-size:10px; color:#666;">{max_event_time_str}</span>
+    <div style="background-color:{bg_color}; padding:8px; border-radius:8px; font-size:10px; display:flex; justify-content:space-between; align-items:center;">
+        <span style="font-weight:bold; color:darkblue; font-size:12px;">{safe_val(match_name)}</span>
+        <span style="font-size:8px;">{group_df['event_time_ts'].iloc[0]}</span>
     </div>
     """, unsafe_allow_html=True)
     
@@ -114,4 +113,14 @@ for i, ((match_id, match_name), group_df) in enumerate(grouped):
             innings_data.append((inning, score))
         
         innings_df = pd.DataFrame(innings_data, columns=["Inning", "Score"])
+
+        # Style table font smaller
+        st.markdown("""
+        <style>
+        .dataframe th, .dataframe td {
+            font-size: 10px !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
         st.table(innings_df)
