@@ -92,6 +92,19 @@ st.title("🏏 Real-Time Cricket Dashboard (Rajat)")
 
 df = load_latest_live_score(LIVE_SCORE_PATH)
 
+st.write("Loaded dataframe shape:", df.shape)
+st.write(df.head(5))
+st.write("Columns:", df.columns.tolist())
+
+# Check types for key columns
+st.write("event_time_ts types:", df['event_time_ts'].apply(type).unique())
+st.write("Teams example:", df['teams'].head(3))
+
+# If teams is list/array, show first element per row to check data
+if 'teams' in df.columns:
+    st.write(df['teams'].apply(lambda x: x[0] if isinstance(x, (list, tuple)) and len(x) > 0 else None).head())
+
+
 if df.empty:
     st.warning("No live score data found.")
     st.stop()
