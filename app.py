@@ -88,7 +88,7 @@ def safe_val(val):
 
 
 
-st.title("🏏 Real-Time Cricket Dashboard")
+st.title("🏏 Real-Time Cricket Dashboard (Rajat)")
 
 df = load_latest_live_score(LIVE_SCORE_PATH)
 
