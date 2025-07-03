@@ -65,6 +65,7 @@ LIVE_SCORE_PATH = f"aws-glue-assets-cricket/output_cricket/live/score_data/year=
 def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFrame:
     # Recursively grab all Parquet files in today’s partition folder
     files = fs.glob(f"{s3_partitioned_path}/**/*.parquet")
+    st.write(fs.ls(s3_partitioned_path).list())
     
     if not files:
         return pd.DataFrame()
