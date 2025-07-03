@@ -20,27 +20,42 @@ def get_s3fs():
 fs = get_s3fs()
 
 LIVE_SCORE_PATH = "aws-glue-assets-cricket/output_cricket/live/score_data"
-@st.cache_data(ttl=10)  # reduced TTL to 10 seconds to test freshness
-def load_latest_live_score(s3_prefix: str, max_files=20) -> pd.DataFrame:
-    # Remove "s3://" prefix here
-    files = fs.glob(f"{s3_prefix}/**/*.parquet")
-    st.write(f"DEBUG: Found {len(files)} parquet files under {s3_prefix}")
 
-    if not files:
+@st.cache_data(ttl=10)
+def load_latest_live_score(s3_prefix: str, max_files=20) -> pd.DataFrame:
+    # Invalidate cache to force fresh listing from S3
+    fs.invalidate_cache()
+    
+    # List all files under the prefix (no filter)
+    all_files = fs.glob(f"{s3_prefix}/**")
+    st.write(f"DEBUG: Total files found under prefix (no filter): {len(all_files)}")
+    for f in all_files:
+        st.write(f"  {f}")
+
+    # Filter parquet files manually (case-insensitive)
+    parquet_files = [f for f in all_files if f.lower().endswith(".parquet")]
+    st.write(f"DEBUG: Found {len(parquet_files)} parquet files after manual filter")
+    for f in parquet_files:
+        st.write(f"  {f}")
+
+    if not parquet_files:
         return pd.DataFrame()
 
+    # Get last modified times for these parquet files
     files_with_mtime = []
-    for f in files:
+    for f in parquet_files:
         try:
-            mtime = fs.info(f)['LastModified']
+            info = fs.info(f)
+            mtime = info['LastModified']
             files_with_mtime.append((f, mtime))
         except Exception as e:
             st.write(f"WARNING: Could not get LastModified for {f}: {e}")
 
+    # Sort files by LastModified descending
     files_sorted = sorted(files_with_mtime, key=lambda x: x[1], reverse=True)
     selected_files = [f[0] for f in files_sorted[:max_files]]
 
-    st.write("DEBUG: Loading these latest files:")
+    st.write("DEBUG: Loading these latest parquet files:")
     for f, mtime in files_sorted[:max_files]:
         st.write(f"  {f} (LastModified: {mtime})")
 
@@ -59,10 +74,12 @@ def load_latest_live_score(s3_prefix: str, max_files=20) -> pd.DataFrame:
 
     return combined_df
 
+
 def safe_val(val):
     if val is None or (isinstance(val, str) and val.strip() == ""):
         return "Missing"
     return val
+
 
 st.title("🏏 Real-Time Cricket Dashboard (Rajat)")
 
@@ -82,7 +99,7 @@ if missing:
     st.error(f"Missing expected columns: {missing}")
     st.stop()
 
-# For debug, show all teams found
+# Show all teams found for debug
 all_teams = set()
 df['teams'].apply(lambda x: all_teams.update(x) if isinstance(x, (list, tuple, np.ndarray)) else all_teams.add(x))
 teams = sorted(all_teams)
@@ -93,47 +110,11 @@ max_times = df.groupby('match_id')['event_time_ts'].max().reset_index()
 st.write("DEBUG: Latest event_time_ts per match_id:")
 st.dataframe(max_times)
 
-# Keep only rows with max event_time_ts per match_id
+# Filter rows with max event_time_ts per match_id
 max_times_map = max_times.set_index('match_id')['event_time_ts'].to_dict()
 df_filtered = df[df.apply(lambda row: row['event_time_ts'] == max_times_map.get(row['match_id'], None), axis=1)]
 
 st.write("Filtered dataframe shape (latest event_time_ts per match):", df_filtered.shape)
 
-# Your existing code to display data from df_filtered continues here...
-# For example:
-grouped = df_filtered.groupby(['match_id', 'name'], as_index=False)
-colors = ["#f0f8ff", "#e6f2ff"]
+# Proceed with display or further logic...
 
-for i, ((match_id, match_name), group_df) in enumerate(grouped):
-    bg_color = colors[i % len(colors)]
-    status = safe_val(group_df['status'].iloc[0])
-    ts = group_df['event_time_ts'].iloc[0]
-
-    st.markdown(f"""
-    <div style="background-color:{bg_color}; padding:8px; border-radius:8px; font-size:10px; display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-weight:bold; color:darkblue; font-size:12px;">{safe_val(match_name)}</span>
-        <span style="font-size:8px;color:darkblue;">{ts}</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-    with st.expander(f"Status: {status}", expanded=False):
-        innings_data = []
-        for _, row in group_df.iterrows():
-            inning = safe_val(row['inning'])
-            runs = row['runs'] if row['runs'] is not None else "Missing"
-            wickets = row['wickets'] if row['wickets'] is not None else "Missing"
-            overs = row['overs'] if row['overs'] is not None else "Missing"
-            score = f"{runs}/{wickets} ({overs} ov)"
-            innings_data.append((inning, score))
-
-        innings_df = pd.DataFrame(innings_data, columns=["Inning", "Score"])
-
-        st.markdown("""
-        <style>
-        .dataframe th, .dataframe td {
-            font-size: 10px !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-        st.table(innings_df)
