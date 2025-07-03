@@ -21,46 +21,37 @@ fs = get_s3fs()
 
 LIVE_SCORE_PATH = "aws-glue-assets-cricket/output_cricket/live/score_data"
 
-@st.cache_data(ttl=10)  # Cache for 10 seconds to test freshness
+@st.cache_data(ttl=10)  # cache 10 seconds for freshness
 def load_latest_live_score(s3_prefix: str, max_files=20) -> pd.DataFrame:
-    # Clear cache to get fresh file list every time
+    # Invalidate cache to get fresh file list on every call
     fs.invalidate_cache()
 
-    # List all parquet files under prefix (recursive)
     all_files = fs.glob(f"s3://{s3_prefix}/**/*.parquet")
-
-    # Filter out any system/metadata files if needed (optional)
     parquet_files = [f for f in all_files if f.lower().endswith(".parquet")]
 
     st.write(f"DEBUG: Total parquet files found under s3://{s3_prefix}: {len(parquet_files)}")
-
     if not parquet_files:
         return pd.DataFrame()
 
-    # Get last modified time for each file
     files_with_mtime = []
     for f in parquet_files:
         try:
             info = fs.info(f)
             mtime = info.get('LastModified') or info.get('last_modified') or info.get('Last-Modified')
             if mtime is None:
-                # Fallback if keys differ, you might adjust depending on s3fs version
                 mtime = pd.Timestamp.now()
             files_with_mtime.append((f, mtime))
         except Exception as e:
             st.write(f"WARNING: Could not get LastModified for {f}: {e}")
 
-    # Sort files descending by LastModified
+    # Sort files descending by last modified
     files_sorted = sorted(files_with_mtime, key=lambda x: x[1], reverse=True)
-
-    # Select only latest max_files
     selected_files = [f[0] for f in files_sorted[:max_files]]
 
     st.write("DEBUG: Loading these latest parquet files:")
     for f, mtime in files_sorted[:max_files]:
         st.write(f"  {f} (LastModified: {mtime})")
 
-    # Read all selected parquet files and combine
     dfs = []
     for file in selected_files:
         try:
@@ -75,7 +66,6 @@ def load_latest_live_score(s3_prefix: str, max_files=20) -> pd.DataFrame:
 
     combined_df = pd.concat(dfs, ignore_index=True)
 
-    # Show min/max event_time_ts for sanity
     if 'event_time_ts' in combined_df.columns:
         min_ts = combined_df['event_time_ts'].min()
         max_ts = combined_df['event_time_ts'].max()
@@ -83,19 +73,30 @@ def load_latest_live_score(s3_prefix: str, max_files=20) -> pd.DataFrame:
 
     return combined_df
 
+def safe_val(val):
+    if val is None or (isinstance(val, str) and val.strip() == ""):
+        return "Missing"
+    return val
+
 st.title("🏏 Real-Time Cricket Dashboard (Rajat)")
 
 df = load_latest_live_score(LIVE_SCORE_PATH)
-
-if df.empty:
-    st.warning("No live score data found.")
-    st.stop()
 
 st.write("Loaded dataframe shape:", df.shape)
 st.write(df.head(5))
 st.write("Columns:", df.columns.tolist())
 
-# Show all unique teams found in data
+if df.empty:
+    st.warning("No live score data found.")
+    st.stop()
+
+required_cols = ['match_id', 'name', 'status', 'inning', 'runs', 'wickets', 'overs', 'teams', 'event_time_ts']
+missing = [c for c in required_cols if c not in df.columns]
+if missing:
+    st.error(f"Missing expected columns: {missing}")
+    st.stop()
+
+# Show all teams found
 all_teams = set()
 def update_teams(x):
     if isinstance(x, (list, tuple, np.ndarray)):
@@ -111,14 +112,30 @@ max_times = df.groupby('match_id')['event_time_ts'].max().reset_index()
 st.write("DEBUG: Latest event_time_ts per match_id:")
 st.dataframe(max_times)
 
-# Filter df to keep only rows with latest event_time_ts per match_id
+# Filter dataframe to only latest event_time_ts per match_id
 max_times_map = max_times.set_index('match_id')['event_time_ts'].to_dict()
 df_filtered = df[df.apply(lambda row: row['event_time_ts'] == max_times_map.get(row['match_id'], None), axis=1)]
 
 st.write("Filtered dataframe shape (latest event_time_ts per match):", df_filtered.shape)
 
-# Show filtered data preview
-st.dataframe(df_filtered.head(10))
+# Checkbox for showing all matches or filter by team
+show_all = st.checkbox("Show all matches", value=True)
 
-# Your display or further analysis here...
+if not show_all:
+    selected_team = st.selectbox("Select Team to filter matches", options=teams)
+    df_filtered = df_filtered[df_filtered['teams'].apply(lambda t: selected_team in t if isinstance(t, (list, tuple, np.ndarray)) else selected_team == t)]
+
+if df_filtered.empty:
+    st.warning("No matches found for the selected filter.")
+    st.stop()
+
+# Display summary table for filtered matches
+st.subheader(f"Matches summary ({len(df_filtered)} rows)")
+summary_cols = ['match_id', 'name', 'status', 'inning', 'runs', 'wickets', 'overs', 'teams', 'event_time_ts']
+st.dataframe(df_filtered[summary_cols].sort_values('event_time_ts', ascending=False).reset_index(drop=True))
+
+# Optional: Show raw JSON or extra data on expanders for each match
+for idx, row in df_filtered.iterrows():
+    with st.expander(f"Details for match: {row['name']} (ID: {row['match_id']})"):
+        st.json(row.to_dict())
 
