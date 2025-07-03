@@ -4,43 +4,6 @@ import numpy as np
 import s3fs
 import os
 
-# CSS styles for small fonts and layout
-st.sidebar.markdown("""
-<style>
-.sidebar-header {
-    font-weight: bold;
-    font-size: 13px;
-    margin: 10px 0 8px 0;
-    color: #ffffff;
-}
-.icon-row {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    margin-bottom: 10px;
-}
-</style>
-""", unsafe_allow_html=True)
-
-st.sidebar.markdown('<div class="sidebar-header">Connect Rajat</div>', unsafe_allow_html=True)
-st.sidebar.markdown("""
-<div class="icon-row">
-  <a href="https://facebook.com/royrajat" target="_blank" title="Facebook">
-    <img src="https://img.icons8.com/ios-filled/24/1877F2/facebook--v1.png"/>
-  </a>
-  <a href="https://linkedin.com/in/royrajat" target="_blank" title="LinkedIn">
-    <img src="https://img.icons8.com/ios-filled/24/0077B5/linkedin.png"/>
-  </a>
-  <a href="https://github.com/royrajat" target="_blank" title="GitHub">
-    <img src="https://img.icons8.com/ios-filled/24/FFFFFF/github.png"/>
-  </a>
-  <a href="https://medium.com/@royrajat" target="_blank" title="Medium">
-    <img src="https://img.icons8.com/ios-filled/24/FFFFFF/medium-logo.png"/>
-  </a>
-</div>
-""", unsafe_allow_html=True)
-
-
 def is_running_locally():
     return os.environ.get("STREAMLIT_ENV") == "local"
 
@@ -58,27 +21,47 @@ fs = get_s3fs()
 
 LIVE_SCORE_PATH = "aws-glue-assets-cricket/output_cricket/live/score_data"
 
-# @st.cache_data(ttl=60)
-# def load_latest_live_score(s3_prefix: str, max_files=10) -> pd.DataFrame:
-#     files = fs.glob(f"{s3_prefix}/**/*.parquet")
-#     if not files:
-#         return pd.DataFrame()
-#     files = sorted(files, reverse=True)[:max_files]
-#     dfs = [pd.read_parquet(f"s3://{file}", filesystem=fs) for file in files]
-#     return pd.concat(dfs, ignore_index=True)
-
-@st.cache_data(ttl=60)
-def load_latest_live_score(s3_prefix: str, max_files=10) -> pd.DataFrame:
+@st.cache_data(ttl=10)  # reduced TTL to 10 seconds to test freshness
+def load_latest_live_score(s3_prefix: str, max_files=20) -> pd.DataFrame:
+    # Use s3fs.stat to get modification times for sorting files by last modified time
     files = fs.glob(f"s3://{s3_prefix}/**/*.parquet")
-    st.write(f"DEBUG: Found {len(files)} files under s3://{s3_prefix}")
+    st.write(f"DEBUG: Found {len(files)} parquet files under s3://{s3_prefix}")
+
     if not files:
         return pd.DataFrame()
-    files = sorted(files, reverse=True)[:max_files]
+
+    # Fetch last modified times
+    files_with_mtime = []
+    for f in files:
+        try:
+            mtime = fs.info(f)['LastModified']
+            files_with_mtime.append((f, mtime))
+        except Exception as e:
+            st.write(f"WARNING: Could not get LastModified for {f}: {e}")
+
+    # Sort files by LastModified descending
+    files_sorted = sorted(files_with_mtime, key=lambda x: x[1], reverse=True)
+    selected_files = [f[0] for f in files_sorted[:max_files]]
+
+    st.write("DEBUG: Loading these latest files:")
+    for f, mtime in files_sorted[:max_files]:
+        st.write(f"  {f} (LastModified: {mtime})")
+
     dfs = []
-    for file in files:
+    for file in selected_files:
         st.write(f"DEBUG: Reading file {file}")
-        dfs.append(pd.read_parquet(f"s3://{file}", filesystem=fs))
-    return pd.concat(dfs, ignore_index=True)
+        df = pd.read_parquet(f"s3://{file}", filesystem=fs)
+        dfs.append(df)
+
+    combined_df = pd.concat(dfs, ignore_index=True)
+
+    # Show earliest and latest event_time_ts in loaded data
+    if 'event_time_ts' in combined_df.columns:
+        min_ts = combined_df['event_time_ts'].min()
+        max_ts = combined_df['event_time_ts'].max()
+        st.write(f"DEBUG: Loaded data event_time_ts range: {min_ts} to {max_ts}")
+
+    return combined_df
 
 
 def safe_val(val):
@@ -87,29 +70,13 @@ def safe_val(val):
     return val
 
 
-
-st.title("🏏 Real-Time Cricket Dashboard (Rajat)1")
+st.title("🏏 Real-Time Cricket Dashboard (Rajat)")
 
 df = load_latest_live_score(LIVE_SCORE_PATH)
 
 st.write("Loaded dataframe shape:", df.shape)
 st.write(df.head(5))
 st.write("Columns:", df.columns.tolist())
-
-# Check types for key columns
-st.write("event_time_ts types:", df['event_time_ts'].apply(type).unique())
-st.write("Teams example:", df['teams'].head(3))
-st.write("Unique types in event_time_ts column:", df['event_time_ts'].apply(lambda x: type(x).__name__).unique())
-st.write("Sample event_time_ts values:", df['event_time_ts'].head(5).tolist())
-st.write("Example teams values and types:")
-st.write(df['teams'].head(5).tolist())
-st.write(df['teams'].apply(lambda x: type(x)).unique())
-
-
-# If teams is list/array, show first element per row to check data
-if 'teams' in df.columns:
-    st.write(df['teams'].apply(lambda x: x[0] if isinstance(x, (list, tuple)) and len(x) > 0 else None).head())
-
 
 if df.empty:
     st.warning("No live score data found.")
@@ -121,68 +88,22 @@ if missing:
     st.error(f"Missing expected columns: {missing}")
     st.stop()
 
-# Extract all unique teams (handle list/array values)
+# For debug, show all teams found
 all_teams = set()
 df['teams'].apply(lambda x: all_teams.update(x) if isinstance(x, (list, tuple, np.ndarray)) else all_teams.add(x))
 teams = sorted(all_teams)
+st.write(f"DEBUG: Teams found ({len(teams)}): {teams}")
 
-# Sidebar checkboxes
-# selected_teams = []
-# for team in teams:
-#     if st.sidebar.checkbox(team, value=False):
-#         selected_teams.append(team)
-
-# if not selected_teams:
-#     st.info("Please select one or more teams from the sidebar to see the data.")
-#     st.stop()
-
-# # Filter rows where any team in the row's teams list is selected
-# mask = df['teams'].apply(lambda x: any(team in selected_teams for team in x) if isinstance(x, (list, tuple, np.ndarray)) else x in selected_teams)
-# filtered_df = df[mask]
-filtered_df = df
-if filtered_df.empty:
-    st.warning("No data for selected teams.")
-    st.stop()
+# Show distinct max event_time_ts per match
+max_times = df.groupby('match_id')['event_time_ts'].max().reset_index()
+st.write("DEBUG: Latest event_time_ts per match_id:")
+st.dataframe(max_times)
 
 # Keep only rows with max event_time_ts per match_id
-max_times = filtered_df.groupby('match_id')['event_time_ts'].transform('max')
-filtered_df = filtered_df[filtered_df['event_time_ts'] == max_times]
+max_times_map = max_times.set_index('match_id')['event_time_ts'].to_dict()
+df_filtered = df[df.apply(lambda row: row['event_time_ts'] == max_times_map.get(row['match_id'], None), axis=1)]
 
-# Group by match_id and name only
-grouped = filtered_df.groupby(['match_id', 'name'], as_index=False)
+st.write("Filtered dataframe shape (latest event_time_ts per match):", df_filtered.shape)
 
-colors = ["#f0f8ff", "#e6f2ff"]
+# Then proceed with your normal display code here...
 
-for i, ((match_id, match_name), group_df) in enumerate(grouped):
-    bg_color = colors[i % len(colors)]
-    status = safe_val(group_df['status'].iloc[0])
-    ts = group_df['event_time_ts'].iloc[0]
-
-    st.markdown(f"""
-    <div style="background-color:{bg_color}; padding:8px; border-radius:8px; font-size:10px; display:flex; justify-content:space-between; align-items:center;">
-        <span style="font-weight:bold; color:darkblue; font-size:12px;">{safe_val(match_name)}</span>
-        <span style="font-size:8px;color:darkblue;">{ts}</span>
-    </div>
-    """, unsafe_allow_html=True)
-
-    with st.expander(f"Status: {status}", expanded=False):
-        innings_data = []
-        for _, row in group_df.iterrows():
-            inning = safe_val(row['inning'])
-            runs = row['runs'] if row['runs'] is not None else "Missing"
-            wickets = row['wickets'] if row['wickets'] is not None else "Missing"
-            overs = row['overs'] if row['overs'] is not None else "Missing"
-            score = f"{runs}/{wickets} ({overs} ov)"
-            innings_data.append((inning, score))
-
-        innings_df = pd.DataFrame(innings_data, columns=["Inning", "Score"])
-
-        st.markdown("""
-        <style>
-        .dataframe th, .dataframe td {
-            font-size: 10px !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
-        st.table(innings_df)
