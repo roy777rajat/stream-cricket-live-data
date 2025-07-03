@@ -20,27 +20,23 @@ def get_s3fs():
 fs = get_s3fs()
 
 LIVE_SCORE_PATH = "aws-glue-assets-cricket/output_cricket/live/score_data"
-
-@st.cache_data(ttl=10)  # short cache for freshness testing
+@st.cache_data(ttl=10)  # reduced TTL to 10 seconds to test freshness
 def load_latest_live_score(s3_prefix: str, max_files=20) -> pd.DataFrame:
-    # Use glob for files directly inside folder (no subfolders)
-    files = fs.glob(f"s3://{s3_prefix}/*.parquet")  # fix: only direct files, no **
-    st.write(f"DEBUG: Found {len(files)} parquet files under s3://{s3_prefix}")
+    # Remove "s3://" prefix here
+    files = fs.glob(f"{s3_prefix}/**/*.parquet")
+    st.write(f"DEBUG: Found {len(files)} parquet files under {s3_prefix}")
 
     if not files:
         return pd.DataFrame()
 
-    # Fetch last modified times for sorting
     files_with_mtime = []
     for f in files:
         try:
-            info = fs.info(f)
-            mtime = info.get('LastModified') or info.get('last_modified')  # depending on s3fs version
+            mtime = fs.info(f)['LastModified']
             files_with_mtime.append((f, mtime))
         except Exception as e:
             st.write(f"WARNING: Could not get LastModified for {f}: {e}")
 
-    # Sort files by last modified descending
     files_sorted = sorted(files_with_mtime, key=lambda x: x[1], reverse=True)
     selected_files = [f[0] for f in files_sorted[:max_files]]
 
@@ -51,12 +47,11 @@ def load_latest_live_score(s3_prefix: str, max_files=20) -> pd.DataFrame:
     dfs = []
     for file in selected_files:
         st.write(f"DEBUG: Reading file {file}")
-        df = pd.read_parquet(file, filesystem=fs)
+        df = pd.read_parquet(f"s3://{file}", filesystem=fs)
         dfs.append(df)
 
     combined_df = pd.concat(dfs, ignore_index=True)
 
-    # Show earliest and latest event_time_ts in loaded data
     if 'event_time_ts' in combined_df.columns:
         min_ts = combined_df['event_time_ts'].min()
         max_ts = combined_df['event_time_ts'].max()
