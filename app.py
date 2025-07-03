@@ -63,21 +63,31 @@ LIVE_SCORE_PATH = f"aws-glue-assets-cricket/output_cricket/live/score_data/year=
 
 @st.cache_data(ttl=60)
 def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFrame:
-    # Recursively grab all Parquet files in today’s partition folder
-    files = fs.glob(f"{s3_partitioned_path}/**/*.parquet")
-    #st.write(fs.ls(s3_partitioned_path).list())
-    
-    if not files:
-        return pd.DataFrame()
-    
-    # Sort by file path (S3 file names usually have timestamps if written by Spark)
-    files = sorted(files, reverse=True)[:max_files]
-    
-    dfs = [pd.read_parquet(f"s3://{f}", filesystem=fs) for f in files]
-    
-    st.write(f"Loaded {len(dfs)} files from {s3_partitioned_path}")
-    return pd.concat(dfs, ignore_index=True)
+    s3_uri = s3_partitioned_path
 
+    # Get all detailed file entries (not folders)
+    all_entries = fs.ls(s3_uri, detail=True)
+    
+    # Filter valid parquet files (exclude folders, _SUCCESS, _temporary, etc.)
+    parquet_files = [
+        entry for entry in all_entries
+        if entry['type'] == 'file'
+        and entry['Key'].endswith('.parquet')
+        and '_temporary' not in entry['Key']
+        and not os.path.basename(entry['Key']).startswith('_')
+    ]
+
+    if not parquet_files:
+        return pd.DataFrame()
+
+    # Sort files by last modified time descending
+    sorted_files = sorted(parquet_files, key=lambda x: x['LastModified'], reverse=True)
+    selected_files = sorted_files[:max_files]
+
+    # Load into DataFrames
+    dfs = [pd.read_parquet(f"s3://{entry['Key']}", filesystem=fs) for entry in selected_files]
+
+    return pd.concat(dfs, ignore_index=True)
 
 def safe_val(val):
     if val is None or (isinstance(val, str) and val.strip() == ""):
