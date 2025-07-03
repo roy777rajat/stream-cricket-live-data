@@ -1,102 +1,129 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
-import s3fs
-import os
+from pyspark.sql.functions import col, from_json, when, size, explode, max as Fmax
+from pyspark.sql.types import StructType, StructField, StringType, BooleanType, ArrayType, IntegerType, FloatType
+from datetime import datetime
 
-def is_running_locally():
-    return os.environ.get("STREAMLIT_ENV") == "local"
+# JSON schema for stream data
+json_schema = StructType([
+    StructField("status", StringType()),
+    StructField("venue", StringType()),
+    StructField("date", StringType()),
+    StructField("dateTimeGMT", StringType()),
+    StructField("teams", ArrayType(StringType())),
+    StructField("teamInfo", ArrayType(
+        StructType([
+            StructField("name", StringType()),
+            StructField("img", StringType())
+        ])
+    )),
+    StructField("score", ArrayType(
+        StructType([
+            StructField("r", IntegerType()),
+            StructField("w", IntegerType()),
+            StructField("o", FloatType()),
+            StructField("inning", StringType())
+        ])
+    )),
+    StructField("series_id", StringType()),
+    StructField("fantasyEnabled", BooleanType()),
+    StructField("bbbEnabled", BooleanType()),
+    StructField("hasSquad", BooleanType()),
+    StructField("matchStarted", BooleanType()),
+    StructField("matchEnded", BooleanType())
+])
 
-def get_s3fs():
-    if is_running_locally():
-        return s3fs.S3FileSystem(anon=False)
-    else:
-        return s3fs.S3FileSystem(
-            key=st.secrets["aws"]["aws_access_key_id"],
-            secret=st.secrets["aws"]["aws_secret_access_key"],
-            client_kwargs={"region_name": st.secrets["aws"].get("region", "us-east-1")},
-        )
+# Paths
+target_path = "s3a://aws-glue-assets-cricket/output_cricket/live/score_data"
+checkpoint_path = "s3a://aws-glue-assets-cricket/output_cricket/live/score_data/checkpoints"
+base_static_path = "s3a://aws-glue-assets-cricket/output_cricket/live/cricket_data"
 
-fs = get_s3fs()
+# Load static metadata for today's partition
+def load_static_match_data(spark):
+    today = datetime.utcnow().date()
+    path = f"{base_static_path}/year={today.year}/month={today.month}/day={today.day}"
+    static_df = spark.read.option("basePath", base_static_path).parquet(path)
+    
+    # Drop duplicates on 'id' (match_id)
+    static_df = static_df.dropDuplicates(["id"])
+    return static_df
 
-LIVE_SCORE_PATH = "aws-glue-assets-cricket/output_cricket/live/score_data"
+# Process streaming micro-batch
+def process_batch(batch_df, batch_id):
+    # Load static match data (today's partition)
+    static_df = load_static_match_data(batch_df.sparkSession)
 
-@st.cache_data(ttl=10)
-def load_latest_live_score(s3_prefix: str, max_files=20) -> pd.DataFrame:
-    fs.invalidate_cache()
-    all_files = fs.glob(f"s3://{s3_prefix}/**/*.parquet")
-    parquet_files = [f for f in all_files if f.lower().endswith(".parquet")]
+    # Drop conflicting columns to avoid join conflicts
+    conflicting_cols = ["matchType", "name", "match_status", "venue"]
+    for c in conflicting_cols:
+        if c in static_df.columns:
+            static_df = static_df.drop(c)
 
-    if not parquet_files:
-        return pd.DataFrame()
+    # Rename id to match_id for join consistency
+    static_df = static_df.withColumnRenamed("id", "match_id")
 
-    files_with_mtime = []
-    for f in parquet_files:
-        info = fs.info(f)
-        mtime = info.get('LastModified') or info.get('last_modified') or info.get('Last-Modified')
-        if mtime is None:
-            mtime = pd.Timestamp.now()
-        files_with_mtime.append((f, mtime))
+    # Parse JSON data in stream
+    parsed_df = batch_df.withColumn("json_parsed", from_json(col("json_data"), json_schema))
 
-    files_sorted = sorted(files_with_mtime, key=lambda x: x[1], reverse=True)
-    selected_files = [f[0] for f in files_sorted[:max_files]]
+    flat_df = parsed_df.select(
+        "id", "name", "matchType", "event_time",
+        col("json_parsed.status").alias("status"),
+        col("json_parsed.venue").alias("venue"),
+        col("json_parsed.teams").alias("teams"),
+        col("json_parsed.score").alias("score"),
+        col("json_parsed.matchStarted").alias("matchStarted"),
+        col("json_parsed.matchEnded").alias("matchEnded")
+    ).withColumn("event_time_ts", col("event_time").cast("timestamp"))
 
-    dfs = []
-    for file in selected_files:
-        df = pd.read_parquet(f"s3://{file}", filesystem=fs)
-        dfs.append(df)
+    # Get latest event_time per match id
+    max_times = flat_df.groupBy("id").agg(Fmax("event_time_ts").alias("max_ts")) \
+                       .withColumnRenamed("id", "max_id")
 
-    combined_df = pd.concat(dfs, ignore_index=True)
-    return combined_df
+    latest_df = flat_df.join(
+        max_times,
+        (flat_df.id == max_times.max_id) & (flat_df.event_time_ts == max_times.max_ts),
+        "inner"
+    ).drop("max_id", "max_ts")
 
-def safe_val(val):
-    if val is None or (isinstance(val, str) and val.strip() == ""):
-        return "Missing"
-    return val
+    # Derive match status column
+    latest_df = latest_df.withColumn(
+        "match_status",
+        when((col("matchStarted") == True) & (col("matchEnded") == False) & (size(col("score")) > 0), "Live")
+        .when((col("matchStarted") == True) & (col("matchEnded") == False), "Upcoming")
+        .when(col("matchEnded") == True, "Completed")
+        .otherwise("Unknown")
+    )
 
-st.title("🏏 Real-Time Cricket Dashboard (Rajat)")
+    # Filter only live matches
+    live_df = latest_df.filter(col("match_status") == "Live")
 
-df = load_latest_live_score(LIVE_SCORE_PATH)
+    # Explode innings array to flatten scores
+    exploded_df = live_df.select(
+        "id", "name", "matchType", "event_time_ts", "status", "venue", "teams", "match_status",
+        explode(col("score")).alias("score_entry")
+    )
 
-if df.empty:
-    st.warning("No live score data found.")
-    st.stop()
+    # Final flattened dataframe with renamed columns
+    final_df = exploded_df.select(
+        col("id").alias("match_id"),
+        "name",
+        "matchType",
+        "event_time_ts",
+        "status",
+        "venue",
+        "teams",
+        "match_status",
+        col("score_entry.inning").alias("inning"),
+        col("score_entry.r").alias("runs"),
+        col("score_entry.w").alias("wickets"),
+        col("score_entry.o").alias("overs")
+    ).dropDuplicates(["match_id", "inning", "event_time_ts"])
 
-required_cols = ['match_id', 'name', 'status', 'inning', 'runs', 'wickets', 'overs', 'teams', 'event_time_ts']
-missing = [c for c in required_cols if c not in df.columns]
-if missing:
-    st.error(f"Missing expected columns: {missing}")
-    st.stop()
+    # Join with static metadata on match_id
+    enriched_df = final_df.join(static_df, on="match_id", how="left")
 
-all_teams = set()
-def update_teams(x):
-    if isinstance(x, (list, tuple, np.ndarray)):
-        all_teams.update(x)
-    elif isinstance(x, str):
-        all_teams.add(x)
-df['teams'].apply(update_teams)
-teams = sorted(all_teams)
+    # Write output to S3 parquet in append mode
+    enriched_df.write.mode("append").parquet(target_path)
 
-max_times = df.groupby('match_id')['event_time_ts'].max().reset_index()
-max_times_map = max_times.set_index('match_id')['event_time_ts'].to_dict()
-df_filtered = df[df.apply(lambda row: row['event_time_ts'] == max_times_map.get(row['match_id'], None), axis=1)]
-
-st.sidebar.title("Filters")
-show_all = st.sidebar.checkbox("Show all matches", value=True)
-
-if not show_all:
-    selected_team = st.sidebar.selectbox("Select Team", options=teams)
-    df_filtered = df_filtered[df_filtered['teams'].apply(lambda t: selected_team in t if isinstance(t, (list, tuple, np.ndarray)) else selected_team == t)]
-
-if df_filtered.empty:
-    st.warning("No matches found for the selected filter.")
-    st.stop()
-
-summary_cols = ['match_id', 'name', 'status', 'inning', 'runs', 'wickets', 'overs', 'teams', 'event_time_ts']
-
-st.subheader(f"Matches summary ({len(df_filtered)})")
-st.dataframe(df_filtered[summary_cols].sort_values('event_time_ts', ascending=False).reset_index(drop=True))
-
-for idx, row in df_filtered.iterrows():
-    with st.expander(f"Details for match: {row['name']} (ID: {row['match_id']})"):
-        st.json(row.to_dict())
+# Example streaming read and write (adjust as per your stream source)
+# streaming_df = spark.readStream.format("kafka").option(...)...load()
+# query = streaming_df.writeStream.foreachBatch(process_batch).option("checkpointLocation", checkpoint_path).start()
+# query.awaitTermination()
