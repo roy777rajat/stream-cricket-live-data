@@ -63,13 +63,20 @@ LIVE_SCORE_PATH = f"aws-glue-assets-cricket/output_cricket/live/score_data/year=
 
 @st.cache_data(ttl=60)
 def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFrame:
-    files = fs.glob(f"{s3_partitioned_path}/*.parquet")
+    # Recursively grab all Parquet files in today’s partition folder
+    files = fs.glob(f"{s3_partitioned_path}/**/*.parquet")
+    
     if not files:
         return pd.DataFrame()
+    
+    # Sort by file path (S3 file names usually have timestamps if written by Spark)
     files = sorted(files, reverse=True)[:max_files]
+    
     dfs = [pd.read_parquet(f"s3://{f}", filesystem=fs) for f in files]
+    
     st.write(f"Loaded {len(dfs)} files from {s3_partitioned_path}")
     return pd.concat(dfs, ignore_index=True)
+
 
 def safe_val(val):
     if val is None or (isinstance(val, str) and val.strip() == ""):
