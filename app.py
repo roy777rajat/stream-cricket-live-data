@@ -3,8 +3,9 @@ import pandas as pd
 import numpy as np
 import s3fs
 import os
+from datetime import datetime
 
-# CSS styles for small fonts and layout
+# Styling
 st.sidebar.markdown("""
 <style>
 .sidebar-header {
@@ -40,7 +41,7 @@ st.sidebar.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-
+# AWS S3 FS
 def is_running_locally():
     return os.environ.get("STREAMLIT_ENV") == "local"
 
@@ -56,15 +57,17 @@ def get_s3fs():
 
 fs = get_s3fs()
 
-LIVE_SCORE_PATH = "aws-glue-assets-cricket/output_cricket/live/score_data"
+# Today's S3 path
+today = datetime.utcnow().date()
+LIVE_SCORE_PATH = f"aws-glue-assets-cricket/output_cricket/live/score_data/year={today.year}/month={today.month}/day={today.day}"
 
 @st.cache_data(ttl=60)
-def load_latest_live_score(s3_prefix: str, max_files=10) -> pd.DataFrame:
-    files = fs.glob(f"{s3_prefix}/**/*.parquet")
+def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFrame:
+    files = fs.glob(f"{s3_partitioned_path}/*.parquet")
     if not files:
         return pd.DataFrame()
     files = sorted(files, reverse=True)[:max_files]
-    dfs = [pd.read_parquet(f"s3://{file}", filesystem=fs) for file in files]
+    dfs = [pd.read_parquet(f"s3://{f}", filesystem=fs) for f in files]
     return pd.concat(dfs, ignore_index=True)
 
 def safe_val(val):
@@ -72,14 +75,14 @@ def safe_val(val):
         return "Missing"
     return val
 
-
-
+# Title
 st.title("🏏 Real-Time Cricket Dashboard")
 
+# Load live data
 df = load_latest_live_score(LIVE_SCORE_PATH)
 
 if df.empty:
-    st.warning("No live score data found.")
+    st.warning("No live score data found for today.")
     st.stop()
 
 required_cols = ['match_id', 'name', 'status', 'inning', 'runs', 'wickets', 'overs', 'teams', 'event_time_ts']
@@ -88,12 +91,12 @@ if missing:
     st.error(f"Missing expected columns: {missing}")
     st.stop()
 
-# Extract all unique teams (handle list/array values)
+# Extract all unique teams
 all_teams = set()
 df['teams'].apply(lambda x: all_teams.update(x) if isinstance(x, (list, tuple, np.ndarray)) else all_teams.add(x))
 teams = sorted(all_teams)
 
-# Sidebar checkboxes
+# Sidebar team checkboxes
 selected_teams = []
 for team in teams:
     if st.sidebar.checkbox(team, value=False):
@@ -103,7 +106,7 @@ if not selected_teams:
     st.info("Please select one or more teams from the sidebar to see the data.")
     st.stop()
 
-# Filter rows where any team in the row's teams list is selected
+# Filter for selected teams
 mask = df['teams'].apply(lambda x: any(team in selected_teams for team in x) if isinstance(x, (list, tuple, np.ndarray)) else x in selected_teams)
 filtered_df = df[mask]
 
@@ -111,11 +114,11 @@ if filtered_df.empty:
     st.warning("No data for selected teams.")
     st.stop()
 
-# Keep only rows with max event_time_ts per match_id
+# Keep latest event_time per match_id
 max_times = filtered_df.groupby('match_id')['event_time_ts'].transform('max')
 filtered_df = filtered_df[filtered_df['event_time_ts'] == max_times]
 
-# Group by match_id and name only
+# Group by match
 grouped = filtered_df.groupby(['match_id', 'name'], as_index=False)
 
 colors = ["#f0f8ff", "#e6f2ff"]
@@ -153,5 +156,3 @@ for i, ((match_id, match_name), group_df) in enumerate(grouped):
         """, unsafe_allow_html=True)
 
         st.table(innings_df)
-
-
