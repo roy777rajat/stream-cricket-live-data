@@ -145,7 +145,7 @@ for i, ((match_id, match_name), group_df) in enumerate(grouped):
     status = safe_val(group_df['status'].iloc[0])
     ts = group_df['event_time_ts'].iloc[0]
 
-   venue = safe_val(group_df['venue'].iloc[0]) if 'venue' in group_df.columns else "Unknown"
+    venue = safe_val(group_df['venue'].iloc[0]) if 'venue' in group_df.columns else "Unknown"
 
     st.markdown(f"""
     <div style="background-color:{bg_color}; padding:8px; border-radius:8px; font-size:10px; display:flex; justify-content:space-between; align-items:center;">
