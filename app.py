@@ -147,17 +147,17 @@ for i, ((match_id, match_name), group_df) in enumerate(grouped):
     ts = group_df['event_time_ts'].iloc[0]
 
    st.markdown(f"""
-<div style="background-color:{bg_color}; padding:8px; border-radius:8px; font-size:10px; display:flex; justify-content:space-between; align-items:center;">
-    <div>
-        <div style="font-weight:bold; color:darkblue; font-size:12px;">{safe_val(match_name)}</div>
-        <div style="font-size:10px; color:#333;">
-            <img src="https://img.icons8.com/ios-filled/12/000000/marker.png" style="margin-right:5px;" />
-            {venue}
+        <div style="background-color:{bg_color}; padding:8px; border-radius:8px; font-size:10px; display:flex; justify-content:space-between; align-items:center;">
+            <div>
+                <div style="font-weight:bold; color:darkblue; font-size:12px;">{safe_val(match_name)}</div>
+                <div style="font-size:10px; color:#333;">
+                    <img src="https://img.icons8.com/ios-filled/12/000000/marker.png" style="margin-right:5px;" />
+                    {venue}
+                </div>
+            </div>
+            <div style="font-size:8px;color:darkblue;">{ts}</div>
         </div>
-    </div>
-    <div style="font-size:8px;color:darkblue;">{ts}</div>
-</div>
-""", unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
     with st.expander(f"Status: {status}", expanded=False):
         innings_data = []
