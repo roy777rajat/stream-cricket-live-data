@@ -64,7 +64,7 @@ LIVE_SCORE_PATH = f"aws-glue-assets-cricket/output_cricket/live/score_data/year=
 @st.cache_data(ttl=60)
 def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFrame:
     s3_uri = s3_partitioned_path
-
+    st.write(f"Loading live score data from: {s3_uri}")
     # Get all detailed file entries (not folders)
     all_entries = fs.ls(s3_uri, detail=True)
     
