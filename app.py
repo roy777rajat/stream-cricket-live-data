@@ -60,7 +60,7 @@ fs = get_s3fs()
 # Today's S3 path
 today = datetime.utcnow().date()
 LIVE_SCORE_PATH = f"aws-glue-assets-cricket/output_cricket/live/score_data/year={today.year}/month={today.month}/day={today.day}"
-
+st.write(f"Live score data path: {LIVE_SCORE_PATH}")
 @st.cache_data(ttl=60)
 def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFrame:
     s3_uri = s3_partitioned_path
