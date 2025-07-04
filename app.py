@@ -86,7 +86,7 @@ def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFra
 
     # Load into DataFrames
     dfs = [pd.read_parquet(f"s3://{entry['Key']}", filesystem=fs) for entry in selected_files]
-
+    st.write(f"Loaded {len(selected_files)} files from {s3_uri}")
     return pd.concat(dfs, ignore_index=True)
 
 def safe_val(val):
