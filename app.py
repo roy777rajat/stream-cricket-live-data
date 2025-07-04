@@ -95,7 +95,8 @@ st.title("🏏 Real-Time Cricket Dashboard")
 
 # Load live data
 df = load_latest_live_score(LIVE_SCORE_PATH)
-st.write(df.show(5))
+
+
 if df.empty:
     st.warning("No live score data found for today.")
     st.stop()
