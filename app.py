@@ -171,9 +171,11 @@ for i, ((match_id, match_name), group_df) in enumerate(grouped):
     elif matchType == "t20":
         bg_color = "#758ea0"  # Light yellow for T20s
         matchType = "T20"
+
+    team1_img = safe_val(group_df['team1_img'].iloc[0]) if 'team1_img' in group_df.columns else ""
+    team2_img = safe_val(group_df['team2_img'].iloc[0]) if 'team2_img' in group_df.columns else ""
    
-    team1_img = safe_val(group_df['team1_img'].iloc[0])
-    team2_img = safe_val(group_df['team2_img'].iloc[0])
+
 
     # Then in your HTML
     st.markdown(f"""
@@ -181,7 +183,7 @@ for i, ((match_id, match_name), group_df) in enumerate(grouped):
         <div>
             <div style="font-weight:bold; color:darkblue; font-size:12px;">
                 <img src="{team1_img}" style="width:20px;height:14px;margin-right:5px;" />
-                {safe_val(match_name)} {safe_val(group_df['matchType'].iloc[0])}
+                {safe_val(match_name)} {safe_val(matchType)}
                 <img src="{team2_img}" style="width:20px;height:14px;margin-left:5px;" />
             </div>
             <div style="font-size:10px; color:#333;">
@@ -192,7 +194,6 @@ for i, ((match_id, match_name), group_df) in enumerate(grouped):
         <div style="font-size:10px;color:darkblue;">{ts}</div>
     </div>
     """, unsafe_allow_html=True)
-
 
     with st.expander(f"Status: {status}", expanded=False):
         innings_data = []
