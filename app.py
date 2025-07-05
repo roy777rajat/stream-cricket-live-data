@@ -145,6 +145,8 @@ filtered_df = df[mask]
 if filtered_df.empty:
     st.warning("No data for selected teams.")
     st.stop()
+st.markdown("### Full Filtered Live Score Data")
+st.dataframe(filtered_df.sort_values(['match_id', 'inning', 'event_time_ts']))
 
 # -- **Here is the change** --
 # You no longer need max() filtering because batch overwrite ensures clean latest data per match_id
