@@ -62,30 +62,63 @@ today = datetime.utcnow().date()
 LIVE_SCORE_PATH = f"aws-glue-assets-cricket/output_cricket/live/score_data/year={today.year}/month={today.month}/day={today.day}"
 
 #Cache for 60 seconds
+# @st.cache_data(ttl=60, show_spinner=False)
+# def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFrame:
+#     s3_uri = s3_partitioned_path
+#     # Get all detailed file entries (not folders)
+#     all_entries = fs.ls(s3_uri, detail=True)
+#     st.write(f"Found {len(all_entries)} entries in {s3_uri}")
+#     # Filter valid parquet files (exclude folders, _SUCCESS, _temporary, etc.)
+#     parquet_files = [
+#         entry for entry in all_entries
+#         if entry['type'] == 'file'
+#         and entry['Key'].endswith('.parquet')
+#         and '_temporary' not in entry['Key']
+#         and not os.path.basename(entry['Key']).startswith('_')
+#     ]
+#     st.write(f"Filtered {len(parquet_files)} valid parquet files in {s3_uri}")
+#     if not parquet_files:
+#         return pd.DataFrame()
+
+#     # Sort files by last modified time descending
+#     sorted_files = sorted(parquet_files, key=lambda x: x['LastModified'], reverse=True)
+#     selected_files = sorted_files[:max_files]
+#     # Load into DataFrames
+#     dfs = [pd.read_parquet(f"s3://{entry['Key']}", filesystem=fs) for entry in selected_files]
+#     return pd.concat(dfs, ignore_index=True)
+
 @st.cache_data(ttl=60, show_spinner=False)
 def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFrame:
     s3_uri = s3_partitioned_path
-    # Get all detailed file entries (not folders)
-    all_entries = fs.ls(s3_uri, detail=True)
-    st.write(f"Found {len(all_entries)} entries in {s3_uri}")
-    # Filter valid parquet files (exclude folders, _SUCCESS, _temporary, etc.)
-    parquet_files = [
-        entry for entry in all_entries
-        if entry['type'] == 'file'
-        and entry['Key'].endswith('.parquet')
-        and '_temporary' not in entry['Key']
-        and not os.path.basename(entry['Key']).startswith('_')
-    ]
-    st.write(f"Filtered {len(parquet_files)} valid parquet files in {s3_uri}")
-    if not parquet_files:
+    try:
+        # 🧠 PRO TIP #1: Use `glob` to target only .parquet files (avoids scanning unnecessary metadata folders)
+        parquet_paths = fs.glob(f"{s3_uri}/**/*.parquet")
+        if not parquet_paths:
+            st.info("No .parquet files found in the path.")
+            return pd.DataFrame()
+        
+        # 🧠 PRO TIP #2: Sort by modified time using `fs.info`
+        files_with_time = [(p, fs.info(p)['LastModified']) for p in parquet_paths]
+        sorted_files = sorted(files_with_time, key=lambda x: x[1], reverse=True)
+        selected_files = [p for p, _ in sorted_files[:max_files]]
+        
+        dfs = []
+        for file_path in selected_files:
+            try:
+                df_part = pd.read_parquet(f"s3://{file_path}", filesystem=fs)
+                dfs.append(df_part)
+            except Exception as e:
+                st.warning(f"Skipped corrupt or locked file: {file_path} -> {e}")
+
+        if not dfs:
+            st.warning("No valid parquet files could be read.")
+            return pd.DataFrame()
+        return pd.concat(dfs, ignore_index=True)
+
+    except Exception as e:
+        st.error(f"Unexpected error accessing S3: {e}")
         return pd.DataFrame()
 
-    # Sort files by last modified time descending
-    sorted_files = sorted(parquet_files, key=lambda x: x['LastModified'], reverse=True)
-    selected_files = sorted_files[:max_files]
-    # Load into DataFrames
-    dfs = [pd.read_parquet(f"s3://{entry['Key']}", filesystem=fs) for entry in selected_files]
-    return pd.concat(dfs, ignore_index=True)
 
 def safe_val(val):
     if val is None or (isinstance(val, str) and val.strip() == ""):
