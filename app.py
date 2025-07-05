@@ -26,16 +26,16 @@ st.sidebar.markdown("""
 st.sidebar.markdown('<div class="sidebar-header">Connect Rajat</div>', unsafe_allow_html=True)
 st.sidebar.markdown("""
 <div class="icon-row">
-  <a href="https://facebook.com/royrajat" target="_blank" title="Facebook">
+  <a href="https://facebook.com/rajat.ray.716/" target="_blank" title="Facebook">
     <img src="https://img.icons8.com/ios-filled/24/1877F2/facebook--v1.png"/>
   </a>
-  <a href="https://linkedin.com/in/royrajat" target="_blank" title="LinkedIn">
+  <a href="https://www.linkedin.com/in/royrajat/" target="_blank" title="LinkedIn">
     <img src="https://img.icons8.com/ios-filled/24/0077B5/linkedin.png"/>
   </a>
-  <a href="https://github.com/royrajat" target="_blank" title="GitHub">
+  <a href="https://github.com/roy777rajat" target="_blank" title="GitHub">
     <img src="https://img.icons8.com/ios-filled/24/FFFFFF/github.png"/>
   </a>
-  <a href="https://medium.com/@royrajat" target="_blank" title="Medium">
+  <a href="https://medium.com/@uk.rajatroy" target="_blank" title="Medium">
     <img src="https://img.icons8.com/ios-filled/24/FFFFFF/medium-logo.png"/>
   </a>
 </div>
@@ -98,7 +98,7 @@ df = load_latest_live_score(LIVE_SCORE_PATH)
 
 
 if df.empty:
-    st.warning("No live score data found for today.")
+    st.warning("No live score data found for today.Sorry")
     st.stop()
 
 required_cols = ['match_id', 'name', 'status', 'inning', 'runs', 'wickets', 'overs', 'teams', 'event_time_ts']
