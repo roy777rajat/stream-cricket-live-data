@@ -174,27 +174,27 @@ for i, ((match_id, match_name), group_df) in enumerate(grouped):
    
 
 
-# Get flag URLs (safely)
-team1_img = safe_val(group_df['teamInfo'].iloc[0][0].get("img")) if isinstance(group_df['teamInfo'].iloc[0], list) and len(group_df['teamInfo'].iloc[0]) > 0 else ""
-team2_img = safe_val(group_df['teamInfo'].iloc[0][1].get("img")) if isinstance(group_df['teamInfo'].iloc[0], list) and len(group_df['teamInfo'].iloc[0]) > 1 else ""
+    # Get flag URLs (safely)
+    team1_img = safe_val(group_df['teamInfo'].iloc[0][0].get("img")) if isinstance(group_df['teamInfo'].iloc[0], list) and len(group_df['teamInfo'].iloc[0]) > 0 else ""
+    team2_img = safe_val(group_df['teamInfo'].iloc[0][1].get("img")) if isinstance(group_df['teamInfo'].iloc[0], list) and len(group_df['teamInfo'].iloc[0]) > 1 else ""
 
-# Then in your HTML
-st.markdown(f"""
-<div style="background-color:{bg_color}; padding:8px; border-radius:8px; font-size:10px; display:flex; justify-content:space-between; align-items:center;">
-    <div>
-        <div style="font-weight:bold; color:darkblue; font-size:12px;">
-            <img src="{team1_img}" style="width:20px;height:14px;margin-right:5px;" />
-            {safe_val(match_name)} {safe_val(group_df['matchType'].iloc[0])}
-            <img src="{team2_img}" style="width:20px;height:14px;margin-left:5px;" />
+    # Then in your HTML
+    st.markdown(f"""
+    <div style="background-color:{bg_color}; padding:8px; border-radius:8px; font-size:10px; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+            <div style="font-weight:bold; color:darkblue; font-size:12px;">
+                <img src="{team1_img}" style="width:20px;height:14px;margin-right:5px;" />
+                {safe_val(match_name)} {safe_val(group_df['matchType'].iloc[0])}
+                <img src="{team2_img}" style="width:20px;height:14px;margin-left:5px;" />
+            </div>
+            <div style="font-size:10px; color:#333;">
+                <img src="https://img.icons8.com/ios-filled/12/000000/marker.png" style="margin-right:5px;" />
+                {venue}
+            </div>
         </div>
-        <div style="font-size:10px; color:#333;">
-            <img src="https://img.icons8.com/ios-filled/12/000000/marker.png" style="margin-right:5px;" />
-            {venue}
-        </div>
+        <div style="font-size:10px;color:darkblue;">{ts}</div>
     </div>
-    <div style="font-size:10px;color:darkblue;">{ts}</div>
-</div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 
     with st.expander(f"Status: {status}", expanded=False):
