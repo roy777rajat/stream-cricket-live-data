@@ -5,7 +5,7 @@ import s3fs
 import os
 from datetime import datetime
 
-# Styling
+# Styling for sidebar
 st.sidebar.markdown("""
 <style>
 .sidebar-header {
@@ -41,7 +41,7 @@ st.sidebar.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# AWS S3 FS
+# AWS S3 FS helper
 def is_running_locally():
     return os.environ.get("STREAMLIT_ENV") == "local"
 
@@ -57,44 +57,16 @@ def get_s3fs():
 
 fs = get_s3fs()
 
-# Today's S3 path
+# Today's live score S3 path (adjust region/format if needed)
 today = datetime.utcnow().date()
 LIVE_SCORE_PATH = f"aws-glue-assets-cricket/output_cricket/live/score_data/year={today.year}/month={today.month}/day={today.day}"
-
-#Cache for 60 seconds
-# @st.cache_data(ttl=60, show_spinner=False)
-# def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFrame:
-#     s3_uri = s3_partitioned_path
-#     # Get all detailed file entries (not folders)
-#     all_entries = fs.ls(s3_uri, detail=True)
-#     st.write(f"Found {len(all_entries)} entries in {s3_uri}")
-#     # Filter valid parquet files (exclude folders, _SUCCESS, _temporary, etc.)
-#     parquet_files = [
-#         entry for entry in all_entries
-#         if entry['type'] == 'file'
-#         and entry['Key'].endswith('.parquet')
-#         and '_temporary' not in entry['Key']
-#         and not os.path.basename(entry['Key']).startswith('_')
-#     ]
-#     st.write(f"Filtered {len(parquet_files)} valid parquet files in {s3_uri}")
-#     if not parquet_files:
-#         return pd.DataFrame()
-
-#     # Sort files by last modified time descending
-#     sorted_files = sorted(parquet_files, key=lambda x: x['LastModified'], reverse=True)
-#     selected_files = sorted_files[:max_files]
-#     # Load into DataFrames
-#     dfs = [pd.read_parquet(f"s3://{entry['Key']}", filesystem=fs) for entry in selected_files]
-#     return pd.concat(dfs, ignore_index=True)
 
 @st.cache_data(ttl=60, show_spinner=False)
 def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFrame:
     try:
         glob_path = f"{s3_partitioned_path}/*.parquet"
-
         parquet_files = fs.glob(glob_path, refresh=True)
         if not parquet_files:
-            #st.info(f"No .parquet files found under {s3_partitioned_path}")
             return pd.DataFrame()
 
         files_with_time = []
@@ -130,8 +102,6 @@ def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFra
         st.error(f"❌ Unexpected error accessing S3: {e}")
         return pd.DataFrame()
 
-
-
 def safe_val(val):
     if val is None or (isinstance(val, str) and val.strip() == ""):
         return "Missing"
@@ -143,9 +113,8 @@ st.title("🏏 Real-Time Cricket Dashboard")
 # Load live data
 df = load_latest_live_score(LIVE_SCORE_PATH)
 
-
 if df.empty:
-    st.warning("No live score data found for today.Sorry")
+    st.warning("No live score data found for today. Sorry")
     st.stop()
 
 required_cols = ['match_id', 'name', 'status', 'inning', 'runs', 'wickets', 'overs', 'teams', 'event_time_ts']
@@ -177,23 +146,21 @@ if filtered_df.empty:
     st.warning("No data for selected teams.")
     st.stop()
 
-# Keep latest event_time per match_id
-max_times = filtered_df.groupby('match_id')['event_time_ts'].transform('max')
-filtered_df = filtered_df[filtered_df['event_time_ts'] == max_times]
+# -- **Here is the change** --
+# You no longer need max() filtering because batch overwrite ensures clean latest data per match_id
 
-# Group by match
+# Group by match_id and name only
 grouped = filtered_df.groupby(['match_id', 'name'], as_index=False)
 
-
 colors = ["#f0f8ff", "#e6f2ff"]
-#Get & show the file timestamp
+
+# Get & show the max timestamp in filtered_df
 st.sidebar.markdown(f"**Data Timestamp:** {filtered_df['event_time_ts'].max()}")
 
 for i, ((match_id, match_name), group_df) in enumerate(grouped):
     bg_color = colors[i % len(colors)]
     status = safe_val(group_df['status'].iloc[0])
     ts = group_df['event_time_ts'].iloc[0]
-
     venue = safe_val(group_df['venue'].iloc[0]) if 'venue' in group_df.columns else "Unknown"
 
     st.markdown(f"""
@@ -208,7 +175,6 @@ for i, ((match_id, match_name), group_df) in enumerate(grouped):
         <div style="font-size:10px;color:darkblue;">{ts}</div>
     </div>
     """, unsafe_allow_html=True)
-
 
     with st.expander(f"Status: {status}", expanded=False):
         innings_data = []
