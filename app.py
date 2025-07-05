@@ -201,7 +201,7 @@ for i, ((match_id, match_name), group_df) in enumerate(grouped):
             inning = safe_val(row['inning'])
             runs = row['runs'] if row['runs'] is not None else "Missing"
             wickets = row['wickets'] if row['wickets'] is not None else "Missing"
-            overs = row['overs'] if row['overs'] is not None else "Missing"
+            overs = round(row['overs'], 1) if row['overs'] is not None else "Missing"
             score = f"{runs}/{wickets} ({overs} ov)"
             innings_data.append((inning, score))
 
