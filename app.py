@@ -90,7 +90,7 @@ LIVE_SCORE_PATH = f"aws-glue-assets-cricket/output_cricket/live/score_data/year=
 @st.cache_data(ttl=60, show_spinner=False)
 def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFrame:
     try:
-        glob_path = f"{s3_partitioned_path}/**/*.parquet"
+        glob_path = f"{s3_partitioned_path}/*.parquet"
 
         parquet_files = fs.glob(glob_path, refresh=True)
         if not parquet_files:
