@@ -90,15 +90,13 @@ LIVE_SCORE_PATH = f"aws-glue-assets-cricket/output_cricket/live/score_data/year=
 @st.cache_data(ttl=60, show_spinner=False)
 def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFrame:
     try:
-        # PRO TIP 🧠: Do not include "s3://" prefix when using fs.glob() or fs.info()
         glob_path = f"{s3_partitioned_path}/**/*.parquet"
 
         parquet_files = fs.glob(glob_path, refresh=True)
         if not parquet_files:
-            st.info(f"No .parquet files found under {s3_partitioned_path}")
+            #st.info(f"No .parquet files found under {s3_partitioned_path}")
             return pd.DataFrame()
 
-        # PRO TIP 🧠: Use fs.info with try-except to skip invalid files
         files_with_time = []
         for path in parquet_files:
             try:
@@ -111,11 +109,9 @@ def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFra
             st.warning("All found files failed metadata read.")
             return pd.DataFrame()
 
-        # Sort by last modified time DESC
         sorted_files = sorted(files_with_time, key=lambda x: x[1], reverse=True)
         selected_paths = [f for f, _ in sorted_files[:max_files]]
 
-        # Read selected files
         dfs = []
         for path in selected_paths:
             try:
@@ -190,6 +186,8 @@ grouped = filtered_df.groupby(['match_id', 'name'], as_index=False)
 
 
 colors = ["#f0f8ff", "#e6f2ff"]
+#Get & show the file timestamp
+st.sidebar.markdown(f"**Data Timestamp:** {filtered_df['event_time_ts'].max
 
 for i, ((match_id, match_name), group_df) in enumerate(grouped):
     bg_color = colors[i % len(colors)]
@@ -207,7 +205,7 @@ for i, ((match_id, match_name), group_df) in enumerate(grouped):
                 {venue}
             </div>
         </div>
-        <div style="font-size:8px;color:darkblue;">{ts}</div>
+        <div style="font-size:10px;color:darkblue;">{ts}</div>
     </div>
     """, unsafe_allow_html=True)
 
