@@ -89,36 +89,51 @@ LIVE_SCORE_PATH = f"aws-glue-assets-cricket/output_cricket/live/score_data/year=
 
 @st.cache_data(ttl=60, show_spinner=False)
 def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFrame:
-    s3_uri = s3_partitioned_path
     try:
-        # 🧠 PRO TIP #1: Use `glob` to target only .parquet files (avoids scanning unnecessary metadata folders)
-        parquet_paths = fs.glob(f"s3://{s3_uri}/*.parquet")
-        st.write(f"Found {len(parquet_paths)} parquet files in {s3_uri}")
-        if not parquet_paths:
-            st.info("No .parquet files found in the path.")
+        # PRO TIP 🧠: Do not include "s3://" prefix when using fs.glob() or fs.info()
+        glob_path = f"{s3_partitioned_path}/**/*.parquet"
+
+        parquet_files = fs.glob(glob_path, refresh=True)
+        if not parquet_files:
+            st.info(f"No .parquet files found under {s3_partitioned_path}")
             return pd.DataFrame()
-        
-        # 🧠 PRO TIP #2: Sort by modified time using `fs.info`
-        files_with_time = [(p, fs.info(p)['LastModified']) for p in parquet_paths]
-        sorted_files = sorted(files_with_time, key=lambda x: x[1], reverse=True)
-        selected_files = [p for p, _ in sorted_files[:max_files]]
-        
-        dfs = []
-        for file_path in selected_files:
+
+        # PRO TIP 🧠: Use fs.info with try-except to skip invalid files
+        files_with_time = []
+        for path in parquet_files:
             try:
-                df_part = pd.read_parquet(f"s3://{file_path}", filesystem=fs)
-                dfs.append(df_part)
+                info = fs.info(path)
+                files_with_time.append((path, info['LastModified']))
             except Exception as e:
-                st.warning(f"Skipped corrupt or locked file: {file_path} -> {e}")
+                st.warning(f"Skipping unreadable file: {path} -> {e}")
+
+        if not files_with_time:
+            st.warning("All found files failed metadata read.")
+            return pd.DataFrame()
+
+        # Sort by last modified time DESC
+        sorted_files = sorted(files_with_time, key=lambda x: x[1], reverse=True)
+        selected_paths = [f for f, _ in sorted_files[:max_files]]
+
+        # Read selected files
+        dfs = []
+        for path in selected_paths:
+            try:
+                df = pd.read_parquet(f"s3://{path}", filesystem=fs)
+                dfs.append(df)
+            except Exception as e:
+                st.warning(f"Skipping corrupt file: {path} -> {e}")
 
         if not dfs:
-            st.warning("No valid parquet files could be read.")
+            st.warning("No valid .parquet files could be read.")
             return pd.DataFrame()
+
         return pd.concat(dfs, ignore_index=True)
 
     except Exception as e:
-        st.error(f"Unexpected error accessing S3: {e}")
+        st.error(f"❌ Unexpected error accessing S3: {e}")
         return pd.DataFrame()
+
 
 
 def safe_val(val):
