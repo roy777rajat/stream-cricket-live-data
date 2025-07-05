@@ -187,7 +187,7 @@ grouped = filtered_df.groupby(['match_id', 'name'], as_index=False)
 
 colors = ["#f0f8ff", "#e6f2ff"]
 #Get & show the file timestamp
-st.sidebar.markdown(f"**Data Timestamp:** {filtered_df['event_time_ts'].max
+st.sidebar.markdown(f"**Data Timestamp:** {filtered_df['event_time_ts'].max()}")
 
 for i, ((match_id, match_name), group_df) in enumerate(grouped):
     bg_color = colors[i % len(colors)]
