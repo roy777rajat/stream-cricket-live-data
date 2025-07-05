@@ -92,7 +92,7 @@ def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFra
     s3_uri = s3_partitioned_path
     try:
         # 🧠 PRO TIP #1: Use `glob` to target only .parquet files (avoids scanning unnecessary metadata folders)
-        parquet_paths = fs.glob(f"s3://{s3_uri}/**/*.parquet")
+        parquet_paths = fs.glob(f"s3://{s3_uri}/*.parquet")
         st.write(f"Found {len(parquet_paths)} parquet files in {s3_uri}")
         if not parquet_paths:
             st.info("No .parquet files found in the path.")
