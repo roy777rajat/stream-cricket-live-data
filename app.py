@@ -116,7 +116,9 @@ df = load_latest_live_score(LIVE_SCORE_PATH)
 if df.empty:
     st.warning("No live score data found for today. Sorry")
     st.stop()
-
+# Show raw loaded live data in a scrollable interactive table before filtering
+st.markdown("### Raw Loaded Live Data (Unfiltered)")
+st.dataframe(df.reset_index(drop=True), use_container_width=True, height=400)
 required_cols = ['match_id', 'name', 'status', 'inning', 'runs', 'wickets', 'overs', 'teams', 'event_time_ts']
 missing = [c for c in required_cols if c not in df.columns]
 if missing:
