@@ -172,11 +172,8 @@ for i, ((match_id, match_name), group_df) in enumerate(grouped):
         bg_color = "#758ea0"  # Light yellow for T20s
         matchType = "T20"
    
-
-
-    # Get flag URLs (safely)
-    team1_img = safe_val(group_df['teamInfo'].iloc[0][0].get("img")) if isinstance(group_df['teamInfo'].iloc[0], list) and len(group_df['teamInfo'].iloc[0]) > 0 else ""
-    team2_img = safe_val(group_df['teamInfo'].iloc[0][1].get("img")) if isinstance(group_df['teamInfo'].iloc[0], list) and len(group_df['teamInfo'].iloc[0]) > 1 else ""
+    team1_img = safe_val(group_df['team1_img'].iloc[0])
+    team2_img = safe_val(group_df['team2_img'].iloc[0])
 
     # Then in your HTML
     st.markdown(f"""
