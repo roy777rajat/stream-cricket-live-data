@@ -173,9 +173,6 @@ for i, ((match_id, match_name), group_df) in enumerate(grouped):
         matchType = "T20"
    
 
-    
-
-    matchType = upper(matchType)  # Ensure match type is upp
 
     st.markdown(f"""
     <div style="background-color:{bg_color}; padding:8px; border-radius:8px; font-size:10px; display:flex; justify-content:space-between; align-items:center;">
