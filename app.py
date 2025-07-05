@@ -163,13 +163,13 @@ for i, ((match_id, match_name), group_df) in enumerate(grouped):
     venue = safe_val(group_df['venue'].iloc[0]) if 'venue' in group_df.columns else "Unknown"
     matchType = safe_val(group_df['matchType'].iloc[0]) if 'matchType' in group_df.columns else "Unknown"
     if matchType == "test":
-        bg_color = "#f5f5dc"  # Light beige for Test matches
+        bg_color = "#eb250b"  # Light beige for Test matches
         matchType = "Test"  # Normalize to uppercase
     elif matchType == "ODI" or matchType == "odi":
-        bg_color = "#d1e7dd"  # Light green for ODIs
+        bg_color = "#0a2ddc"  # Light green for ODIs
         matchType = "ODI"  # Normalize to uppercase
     elif matchType == "t20":
-        bg_color = "#fff3cd"  # Light yellow for T20s
+        bg_color = "#1e0111"  # Light yellow for T20s
         matchType = "T20"
    
 
