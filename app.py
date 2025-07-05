@@ -65,7 +65,7 @@ def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFra
     s3_uri = s3_partitioned_path
     # Get all detailed file entries (not folders)
     all_entries = fs.ls(s3_uri, detail=True)
-    #st.write(f"Found {len(all_entries)} entries in {s3_uri}")
+    st.write(f"Found {len(all_entries)} entries in {s3_uri}")
     # Filter valid parquet files (exclude folders, _SUCCESS, _temporary, etc.)
     parquet_files = [
         entry for entry in all_entries
@@ -74,7 +74,7 @@ def load_latest_live_score(s3_partitioned_path: str, max_files=10) -> pd.DataFra
         and '_temporary' not in entry['Key']
         and not os.path.basename(entry['Key']).startswith('_')
     ]
-    #st.write(f"Filtered {len(parquet_files)} valid parquet files in {s3_uri}")
+    st.write(f"Filtered {len(parquet_files)} valid parquet files in {s3_uri}")
     if not parquet_files:
         return pd.DataFrame()
 
