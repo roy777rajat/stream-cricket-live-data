@@ -156,15 +156,31 @@ colors = ["#f0f8ff", "#e6f2ff"]
 # Get & show the max timestamp in filtered_df
 #st.sidebar.markdown(f"**Data Timestamp:** {filtered_df['event_time_ts'].max()}")
 
-for i, ((match_id, match_name,matchType), group_df) in enumerate(grouped):
+for i, ((match_id, match_name), group_df) in enumerate(grouped):
     bg_color = colors[i % len(colors)]
     status = safe_val(group_df['status'].iloc[0])
     ts = group_df['event_time_ts'].iloc[0]
     venue = safe_val(group_df['venue'].iloc[0]) if 'venue' in group_df.columns else "Unknown"
+    matchType = safe_val(group_df['matchType'].iloc[0]) if 'matchType' in group_df.columns else "Unknown"
+    if matchType == "test":
+        bg_color = "#f5f5dc"  # Light beige for Test matches
+        matchType
+    elif matchType == "ODI" or matchType == "odi":
+        bg_color = "#d1e7dd"  # Light green for ODIs
+        matchType = "ODI"  # Normalize to uppercase
+    elif matchType == "t20":
+        bg_color = "#fff3cd"  # Light yellow for T20s
+        matchType = "T20"
+   
+
+    
+
+    matchType = upper(matchType)  # Ensure match type is upp
 
     st.markdown(f"""
     <div style="background-color:{bg_color}; padding:8px; border-radius:8px; font-size:10px; display:flex; justify-content:space-between; align-items:center;">
         <div>
+            <div style="font-weight:bold; color:darkblue; font-size:12px;">{safe_val(match_name)}</div>
             <div style="font-weight:bold; color:darkblue; font-size:12px;">{safe_val(matchType)}</div>
             <div style="font-size:10px; color:#333;">
                 <img src="https://img.icons8.com/ios-filled/12/000000/marker.png" style="margin-right:5px;" />
