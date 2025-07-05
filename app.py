@@ -145,13 +145,8 @@ filtered_df = df[mask]
 if filtered_df.empty:
     st.warning("No data for selected teams.")
     st.stop()
-st.markdown("### Full Filtered Live Score Data")
-st.dataframe(filtered_df.sort_values(['match_id', 'inning', 'event_time_ts']))
 
-# -- **Here is the change** --
-# You no longer need max() filtering because batch overwrite ensures clean latest data per match_id
-
-# Group by match_id and name only
+# Group by match_id and name only (no max filtering needed due to batch overwrite)
 grouped = filtered_df.groupby(['match_id', 'name'], as_index=False)
 
 colors = ["#f0f8ff", "#e6f2ff"]
@@ -199,3 +194,8 @@ for i, ((match_id, match_name), group_df) in enumerate(grouped):
         """, unsafe_allow_html=True)
 
         st.table(innings_df)
+
+# --- New addition to show full DataFrame ---
+
+st.markdown("### Full Live Score Data")
+st.dataframe(filtered_df.reset_index(drop=True))
