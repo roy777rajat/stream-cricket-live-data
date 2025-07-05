@@ -9,7 +9,13 @@ venv/
 env/
 ENV/
 
+executed
+/executed
+executed/
 
+logs
+/logs
+logs/
 
 # VSCode settings
 .vscode/
